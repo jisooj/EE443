@@ -20,12 +20,3 @@ flip:
 		subi r6, r6, 4		# N -= 4
 		bgt  r6, r0, LOOP	# if (N > 0) { LOOP } else { DONE }
 
-	
-	
-# Try this for more efficient code 
-
-# Change this 
-	# ldw  r9, 0(r4)		# temp = *src
-	# stw  r9, 0(r5)		# *dst = temp
-# to this code:
-	# stw 0(r4), 0(r5)		# *dst = *src
