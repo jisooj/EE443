@@ -45,11 +45,14 @@ convolve:
 		subi r5, r5, 4			# h--
 		subi r8, r8, 1			# counter--
 		bge  r4, r9, MOD		# if (x >= counter)
-		CONDITION:
-			bgt  r8, r0, LOOP		# if (counter > 0) { LOOP } else { DONE }
-	ret 
+		jmp CONDITION
+		
+	CONDITION:
+		bgt  r8, r0, LOOP		# if (counter > 0) { LOOP } else { DONE }
 		
 	MOD:
 		sub r4, r4, r6
 		jmp CONDITION
-	
+		
+	END:
+		ret 
