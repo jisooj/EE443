@@ -24,12 +24,12 @@
 
 convolve:
 	add r2, r0, r0		# sum = 0
-	stw r6, r8 			# counter = N, will decr by 1
+	stw r6, r8          # counter = N, will decr by 1
 	muli r6, r6, 4		# N *= 4
 	add r5, r5, r6 		# h += N. h points one word past the last element 
 	subi r5, r5, 4		# h--. h now points to the last element
 	add r9, r4, r6		# r9 = x + N. Used for MOD purpose.
-						# Points to one word past the last element of x. 
+                        # Points to one word past the last element of x. 
 	muli r7, r7, 4		# i *= 4
 	add  r4, r4, r7		# x += startIndex
 	

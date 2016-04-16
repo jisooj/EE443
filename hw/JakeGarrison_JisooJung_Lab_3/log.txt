@@ -1,0 +1,5 @@
+i = 0, convResult = 55
+i = 1, convResult = 75
+i = 2, convResult = 85
+i = 3, convResult = 85
+i = 4, convResult = 75
