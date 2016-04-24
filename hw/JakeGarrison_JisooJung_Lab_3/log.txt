@@ -1,5 +1,0 @@
-i = 0, convResult = 1
-i = 1, convResult = 5
-i = 2, convResult = 14
-i = 3, convResult = 30
-i = 4, convResult = 55

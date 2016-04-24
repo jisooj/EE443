@@ -1,6 +1,6 @@
-/* HW3 QUESTION 1
- * Jake and Jisoo
- */
+/* Lab 3
+ * Jisoo Jung, Jake Garrison
+ * */
 
 /*
  * yourISR.h
@@ -16,18 +16,81 @@
 
 #endif /* YOURISR_H_ */
 #include "system_init.h"
-#include "fdacoefs.h"
-// -------------------------------------------------
-#define N 5
-int convIndex = 0;
-int convBuffer[N];
 
-// -------------------------------------------------
+// --------------------------------------------
+#define UART_BUFFER_SIZE 256
+int UARTData[UART_BUFFER_SIZE];
 
+int switch0Flag = 0;
+int switch1Flag = 0;
+int switch2Flag = 0;
+
+static short mDelay = 0;
+static short mDelay_1 = 0;
+static short mDelay_2 = 0;
+static int N = 0;
+static int Goertzel_Value = 0;
+
+/* NOTE: Frequency detection ranges are off by 50~70
+ * Ranges for:
+ *    2000 Hz works best at around 1954 Hz
+ *    2400 Hz works best at around 2343 Hz
+ *    2800 Hz works best at around 2732 Hz
+ *
+ * NOTE: negation for the negative hex numbers
+ *
+ * k values: 
+ *    k1 = 51 
+ *    k2 = 62
+ *    k3 = 72
+ * */
+// with unrounded k values
+short coef_1 = 0x0;         // For detecting 2000 Hz
+short coef_2 = ~0x278E + 1; // For detecting 2400 Hz
+short coef_3 = ~0x4B3D + 1; // For detecting 2800 Hz
+
+// with rounded k values
+/*
+short coef_1 = 0xFB;         // For detecting 2000 Hz
+short coef_2 = ~0x296A + 1; // For detecting 2400 Hz
+short coef_3 = ~0x4C07 + 1; // For detecting 2800 Hz
+*/
+
+short coef = 0x0;
+int prod1 = 0;
+int prod2 = 0;
+int prod3 = 0;
+int input = 0;
+
+void Goertzel(int R_in) {
+	input = (short) R_in;
+	input = input >> 4; // Scale down input to prevent overflow
+	prod1 = (mDelay_1 * coef) >> 14;
+	mDelay = input + (short)prod1 - mDelay_2;
+	mDelay_2 = mDelay_1;
+	mDelay_1 = mDelay;
+	N++;
+	if (N == 205) {
+		prod1 = (mDelay_1 * mDelay_1);
+		prod2 = (mDelay_2 * mDelay_2);
+		prod3 = (mDelay_1 * coef) >> 14;
+		prod3 = prod3 * mDelay_2;
+		Goertzel_Value = (prod1 + prod2 - prod3) >> 15;
+		Goertzel_Value <<= 4; // Scale up value for sensitivity
+		N = 0;
+		mDelay_1 = 0;
+		mDelay_2 = 0;
+		printf("Goertzel_Value = %d\n", Goertzel_Value);
+	}
+	IOWR_ALTERA_AVALON_PIO_DATA(LEFTSENDDATA_BASE, Goertzel_Value);
+}
+
+// --------------------------------------------
 
 //Value for interrupt ID
 extern alt_u32 switch0_id;
 extern alt_u32 switch1_id;
+extern alt_u32 switch2_id;
 extern alt_u32 key0_id;
 extern alt_u32 key1_id;
 extern alt_u32 key2_id;
@@ -49,7 +112,7 @@ extern int sampleFrequency;
 extern alt_16 leftChannelData[BUFFERSIZE];
 extern alt_16 rightChannelData[BUFFERSIZE];
 extern int convResultBuffer[CONVBUFFSIZE];
-extern alt_16 datatest[N];
+extern alt_16 datatest[256];
 /*uart-global
  * RxHead: integer indicator tells you the index of where the
  * newest char data you received from host computer
@@ -94,6 +157,10 @@ static void handle_switch0_interrupt(void* context, alt_u32 id) {
 	 IOWR_ALTERA_AVALON_PIO_EDGE_CAP(SWITCH0_BASE, 0);
 
 	 /*Perform Jobs*/
+	 if (IORD_ALTERA_AVALON_PIO_DATA(SWITCH0_BASE)) {
+		 coef = coef_1;
+		 switch0Flag = 1;
+	 }
 }
 
 static void handle_switch1_interrupt(void* context, alt_u32 id) {
@@ -104,6 +171,24 @@ static void handle_switch1_interrupt(void* context, alt_u32 id) {
 	 IOWR_ALTERA_AVALON_PIO_EDGE_CAP(SWITCH1_BASE, 0);
 
 	 /*Perform Jobs*/
+	 if (IORD_ALTERA_AVALON_PIO_DATA(SWITCH1_BASE)) {
+		 coef = coef_2;
+		 switch1Flag = 1;
+	 }
+}
+
+static void handle_switch2_interrupt(void* context, alt_u32 id) {
+	 volatile int* switch2ptr = (volatile int *)context;
+	 *switch2ptr = IORD_ALTERA_AVALON_PIO_EDGE_CAP(SWITCH2_BASE);
+
+	 /* Write to the edge capture register to reset it. */
+	 IOWR_ALTERA_AVALON_PIO_EDGE_CAP(SWITCH2_BASE, 0);
+
+	 /*Perform Jobs*/
+	 if (IORD_ALTERA_AVALON_PIO_DATA(SWITCH2_BASE)) {
+		 coef = coef_3;
+		 switch2Flag = 1;
+	 }
 }
 
 /* Enable the flag to send recent
@@ -139,6 +224,7 @@ static void handle_key2_interrupt(void* context, alt_u32 id) {
 
 	 /* Write to the edge capture register to reset it. */
 	 IOWR_ALTERA_AVALON_PIO_EDGE_CAP(KEY2_BASE, 0);
+
 }
 
 static void handle_key3_interrupt(void* context, alt_u32 id) {
@@ -147,6 +233,8 @@ static void handle_key3_interrupt(void* context, alt_u32 id) {
 
 	 /* Write to the edge capture register to reset it. */
 	 IOWR_ALTERA_AVALON_PIO_EDGE_CAP(KEY3_BASE, 0);
+
+	 IOWR_ALTERA_AVALON_PIO_DATA(LED_BASE, 0x10);
 }
 
 /*  Detect left channel ready interrupt and do:
@@ -180,14 +268,10 @@ static void handle_leftready_interrupt_test(void* context, alt_u32 id) {
 	 IOWR_ALTERA_AVALON_PIO_EDGE_CAP(LEFTREADY_BASE, 0);
 	 /*******Read, playback, store data*******/
 	 leftChannel = IORD_ALTERA_AVALON_PIO_DATA(LEFTDATA_BASE);
-	 IOWR_ALTERA_AVALON_PIO_DATA(LEFTSENDDATA_BASE, leftChannel);
 
-	 datatest[leftCount] = leftChannel;
-	 leftCount = (leftCount + 1) % N;
-
-	 convBuffer[convIndex] = convolve(datatest, h_FIR, N, leftCount);
-	 convIndex = (convIndex + 1) % N;
-//	 /****************************************/
+	 Goertzel(leftChannel);
+	 UARTData[leftCount] = Goertzel_Value;
+	 leftCount = (leftCount + 1) % UART_BUFFER_SIZE;
 }
 
 

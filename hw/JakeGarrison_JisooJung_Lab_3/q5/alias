@@ -1,0 +1,2 @@
+alias build="gcc -std=c99 reduce.c -ljpeg -o reduce.o && ./reduce.o 32"
+alias disp="xdg-open reduced_result.jpg && xdg-open original_result.jpg"
